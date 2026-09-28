@@ -2,51 +2,39 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (url.pathname !== "/test-ai") {
+    if (url.pathname !== "/test-page") {
       return new Response(
         "Tim's comment moderator is online. No Facebook actions are enabled.",
         { headers: { "content-type": "text/plain; charset=utf-8" } }
       );
     }
 
-    const examples = [
+    if (!env.FACEBOOK_PAGE_TOKEN) {
+      return Response.json({ ok: false, error: "Page token secret is missing" });
+    }
+
+    const response = await fetch(
+      "https://graph.facebook.com/v26.0/me?fields=id,name",
       {
-        label: "Unrelated advertisement",
-        comment: "Trust Home Care: home nursing services in Alexandria. Call us on WhatsApp."
-      },
-      {
-        label: "Customer question",
-        comment: "بكام الاشتراك في الماراثون"
+        headers: {
+          Authorization: `Bearer ${env.FACEBOOK_PAGE_TOKEN}`
+        }
       }
-    ];
+    );
 
-    const results = [];
+    const page = await response.json();
 
-    for (const example of examples) {
-      const aiResult = await env.AI.run("@cf/meta/llama-3.2-3b-instruct", {
-        messages: [
-          {
-            role: "system",
-            content:
-              "You review Arabic and English comments on Tim's Coffee, a coffee shop's Facebook Page. " +
-              "Reply with exactly one label: SPAM, CUSTOMER_QUESTION, COMPLAINT, or UNSURE. " +
-              "Use SPAM for unrelated advertising or scams. Do not label ordinary questions or criticism as spam."
-          },
-          {
-            role: "user",
-            content: example.comment
-          }
-        ],
-        max_tokens: 30,
-        temperature: 0
-      });
-
-      results.push({
-        example: example.label,
-        ai_answer: aiResult.response
+    if (!response.ok) {
+      return Response.json({
+        ok: false,
+        error: page.error?.message ?? "Facebook request failed"
       });
     }
 
-    return Response.json(results);
+    return Response.json({
+      ok: page.id === "485957924599323",
+      page_name: page.name,
+      page_id_matches_tims: page.id === "485957924599323"
+    });
   }
 };
